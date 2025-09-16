@@ -2,11 +2,9 @@ name: Java App Docker Build & Run
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -15,31 +13,56 @@ jobs:
     env:
       IMAGE: javaapp:21
       OUTPUT_FILE: app_output.txt
+      BUILD_DIR: app    # <-- set your build folder here
 
     steps:
-      # Step 1: Checkout repo
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Set up Docker (comes pre-installed on ubuntu-latest, but ensure it's available)
-      - name: Verify Docker installation
+      - name: Show repo files (debug)
+        run: |
+          echo "Workspace: $GITHUB_WORKSPACE"
+          ls -la
+          echo "--- root files ---"
+          ls -la .
+          echo "--- show app folder if exists ---"
+          if [ -d "${{ env.BUILD_DIR }}" ]; then
+            ls -la "${{ env.BUILD_DIR }}"
+          else
+            echo "Directory '${{ env.BUILD_DIR }}' does NOT exist"
+          fi
+
+      - name: Show Dockerfile (debug)
+        if: ${{ always() }}
+        run: |
+          if [ -f "${{ env.BUILD_DIR }}/Dockerfile" ]; then
+            echo "===== Dockerfile content ====="
+            sed -n '1,120p' "${{ env.BUILD_DIR }}/Dockerfile" || true
+          else
+            echo "No Dockerfile found at ${{ env.BUILD_DIR }}/Dockerfile"
+          fi
+
+      - name: Verify Docker available
         run: docker --version
 
-      # Step 3: Build Docker image
-      - name: Build Docker image
-        run: docker build -t $IMAGE .
+      - name: Build Docker image (use correct context)
+        run: |
+          # ensure we're in repo root, then build using the app folder as context
+          docker build -f "${{ env.BUILD_DIR }}/Dockerfile" -t "${{ env.IMAGE }}" "${{ env.BUILD_DIR }}"
 
-      # Step 4: Run container and capture output
-      - name: Run container and save output
-        run: docker run --rm $IMAGE | tee $OUTPUT_FILE
+      - name: Inspect image (optional)
+        run: docker images | grep "${{ env.IMAGE }}" || true
 
-      # Step 5: Upload output file as artifact
-      - name: Upload output
+      - name: Run container and capture output
+        run: |
+          # run image and capture stdout to artifact file
+          docker run --rm "${{ env.IMAGE }}" | tee "${{ env.OUTPUT_FILE }}"
+
+      - name: Upload output as artifact
         uses: actions/upload-artifact@v4
         with:
           name: app-output
-          path: $OUTPUT_FILE
+          path: ${{ env.OUTPUT_FILE }}
 
-      # Step 6: (Optional) Clean up image
-      - name: Remove Docker image
-        run: docker rmi $IMAGE || true
+      - name: Remove Docker image (cleanup)
+        run: docker rmi "${{ env.IMAGE }}" || true
