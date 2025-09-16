@@ -1,0 +1,45 @@
+name: Java App Docker Build & Run
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE: javaapp:21
+      OUTPUT_FILE: app_output.txt
+
+    steps:
+      # Step 1: Checkout repo
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up Docker (comes pre-installed on ubuntu-latest, but ensure it's available)
+      - name: Verify Docker installation
+        run: docker --version
+
+      # Step 3: Build Docker image
+      - name: Build Docker image
+        run: docker build -t $IMAGE .
+
+      # Step 4: Run container and capture output
+      - name: Run container and save output
+        run: docker run --rm $IMAGE | tee $OUTPUT_FILE
+
+      # Step 5: Upload output file as artifact
+      - name: Upload output
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-output
+          path: $OUTPUT_FILE
+
+      # Step 6: (Optional) Clean up image
+      - name: Remove Docker image
+        run: docker rmi $IMAGE || true
